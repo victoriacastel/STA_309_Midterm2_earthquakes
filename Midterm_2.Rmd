@@ -1,0 +1,207 @@
+---
+title: "Midterm 2"
+author: "Victoria Castel"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+## Packages and data
+```{r}
+## Packages
+library(tidyverse)
+library(maps)
+library(ggthemes)
+library(lubridate)
+library(patchwork)
+```
+
+```{r}
+## Data
+earthquake_data <- read_csv("earthquake_record_1965_2016.csv")
+```
+
+## Preminary data handling
+```{r}
+## Source for out of order dates:
+##  https://www.statmethods.net/input/dates.html
+glimpse(earthquake_data)
+
+## filter for March 14, 1980 through July 22, 2005
+## R USES YYYY-MM-DD FORMAT!!!!!
+earthquake_data <- earthquake_data %>%
+  mutate(Date = as.Date(Date, "%m/%d/%Y")) %>%
+  filter(Type == "Earthquake")
+
+# %>%
+#   filter(Date >= "1980-03-14" & Date <= "2005-07-22") 
+
+
+## Using a function to assign hemispheres
+which_hem <- function(x=Longitude, y=Latitude) {
+  if (x <= 0 & y <= 0) {
+    hemisphere = "Southwest"  ## SW
+    # long = x
+    # lat = y
+  } else if (x <= 0 & y >  0) {  ## NW
+    hemisphere = "Northwest"  
+    # long = x
+    # lat = y
+  } else if (x > 0 & y < 0) {   ## SE
+    hemisphere = "Southeast"
+    # long = x
+    # lat = y
+  } else if (x > 0 & y > 0 ) {  ## NE
+    hemisphere = "Northeast"
+    # long = x
+    # lat = y
+  }
+  else
+    hemisphere = NA
+}
+
+## New col for hemisphere by calling the function which_hem
+hem <- mapply(which_hem, x=earthquake_data$Longitude, y=earthquake_data$Latitude) 
+hem_df <- data.frame(hem)
+
+earthquakeHem_df <- bind_cols(earthquake_data, hem_df) %>%
+  select(Longitude, Latitude, hem, Magnitude, Depth, Date, Time)
+
+```
+
+```{r}
+## Map with earthquakes mapped out
+## get world map data
+world_map_data <- map_data("world") %>%
+  filter(long <= 180, lat <= 180) %>%
+  unique()
+
+##  only month and day
+## Data handling
+## Separating date: 
+##  https://community.rstudio.com/t/converting-dates-year-month-day-to-3-separate-columns-year-month-day/8585
+
+ungrouped_year_df <- earthquakeHem_df %>%
+  mutate(Year = lubridate:: year(Date),
+         Month = lubridate:: month(Date),
+         Day = lubridate:: day(Date))
+glimpse(ungrouped_year_df)
+
+## Creating arbitrary year
+monthDay_df <- ungrouped_year_df %>%
+  mutate(month_day = make_date(year=2000, month = Month, day = Day))
+
+## Also want the summary data for number of earthquakes for each day
+monthDay_df <- monthDay_df %>%
+  group_by(Date) %>%
+  mutate(num_per_day = n())
+
+```
+
+```{r}
+## Looking at nearby earthquakes 10 days after
+
+japan_earthquake <- monthDay_df %>%
+  filter(num_per_day == 128,
+         hem == "Northeast") ## One entry not related to japan earthquake from A
+
+
+near_japan_df <- monthDay_df %>%
+  filter(Date > as.Date("2011-03-11") & Date <= as.Date("2011-03-21"),  ## 10 days after
+         Longitude > 100 & Longitude < 150, ## Somewhat arbitrary but accounts for all "nearby" earthquakes
+         Latitude > 25 & Latitude < 50) 
+
+## Map of just japan? 
+japan_map <- world_map_data %>%
+  filter(region == "Japan") 
+```
+
+## Maps and graphs
+```{r}
+## Just Tōhoku, Japan earthquake point
+japan_point <- monthDay_df %>%
+  filter(num_per_day >=128)
+
+## Number of earthquakes per day over time
+p.num <- 
+ggplot() +
+  geom_point(data=monthDay_df, aes(x=Date, y=num_per_day), color="grey40") +
+  geom_point(data=japan_point, aes(x=Date, y=num_per_day), color="red") +
+  annotate("text", x=as.Date("2012-01-01"), y=115, label="2011 Tōhoku, Japan\nearthquake", 
+           color="red", family="serif") +
+  theme_minimal() +
+  theme(text = element_text(family="serif"),
+        plot.caption = element_text(family="mono"),
+        axis.title.y = element_blank(),
+        axis.title.x = element_blank()) +
+  labs(title = "Number of earthquakes per day over time",
+       subtitle = "Significant number in a day (3-11-2011)",
+       caption = "Source: National Earthquake Information Center (NEIC)") +
+  scale_x_date(minor_breaks = NULL) +
+  scale_y_continuous(minor_breaks = NULL)
+p.num
+
+```
+
+``` {r}
+## a map of the earthquake in Japan with the aftershock
+p.map <-
+ggplot() +
+  geom_polygon(data=japan_map, aes(x=long, y=lat, group=group),
+               fill="grey95", color="grey40") +
+  geom_point(data=japan_earthquake, aes(x=Longitude, y=Latitude), size=1) + ## earthquake
+  geom_point(data=near_japan_df, aes(x=Longitude, y=Latitude), color="red", size=1) + ## 10 days 
+  theme_map() +
+  coord_map() +
+  labs(title = "2011 Tōhoku, Japan earthquake and aftershock",
+       subtitle = "Aftershock is in the same place as initial earthquake",
+       caption = "Source: National Earthquake Information Center (NEIC)") +
+  annotate("segment", x=140, xend=140.6, y=31.5, yend=34.5,
+           color="red", size=0.8, arrow=arrow(length=unit(0.3, "cm"))) +
+  annotate("segment", x=146, xend=144, y=33, yend=36,
+           color="black", size=0.8, arrow=arrow(length=unit(0.3, "cm"))) +
+  annotate("text", x=140, y=30.5, label="Aftershock (10 days)", 
+           color="red", family="serif", size=3.5) +
+  annotate("text", x=147, y=32, label="Initial earthquake", 
+           color="black", family="serif", size=3.5) +
+  theme(text = element_text(family="serif"),
+        plot.caption = element_text(family="mono")) +
+  scale_x_continuous(limits=c(120, 155))
+p.map
+```
+
+
+``` {r}
+## num per day aftershock
+p.aftershock <- 
+ggplot() +
+  geom_col(data=near_japan_df, aes(x=Day, y=num_per_day), position = "identity", fill="grey40") +
+  labs(title = "Number of earthquakes for 10 days following 2011 Tōhoku, Japan earthquake",
+       subtitle = "Decrease in number of earthquakes per day",
+       caption = "Source: National Earthquake Information Center (NEIC)") +
+  theme_minimal() +
+  theme(text = element_text(family="serif"), 
+        plot.caption = element_text(family="mono"),
+        axis.title.x = element_blank(),
+        axis.title.y = element_blank(),
+        axis.ticks.x = element_blank()) +
+  scale_x_continuous(labels = NULL, 
+                     minor_breaks = NULL,
+                     breaks = NULL) +
+  scale_y_continuous(minor_breaks = NULL)
+p.aftershock
+
+```
+
+
+
+```{r}
+## building dashboard
+p.num
+p.map
+p.aftershock
+
+p.num | p.map / p.aftershock
+
+p.map | (p.num / p.aftershock) 
+```
+
