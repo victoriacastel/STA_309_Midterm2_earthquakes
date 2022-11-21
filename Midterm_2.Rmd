@@ -98,17 +98,18 @@ monthDay_df <- monthDay_df %>%
 ```
 
 ```{r}
-## Looking at nearby earthquakes 10 days after
-
+## Just Tōhoku, Japan earthquake point
 japan_earthquake <- monthDay_df %>%
   filter(num_per_day == 128,
-         hem == "Northeast") ## One entry not related to japan earthquake from A
+         hem == "Northeast",   ## One entry not related to japan earthquake from A
+         Magnitude == 9.1) 
 
-
+## Looking at nearby earthquakes 10 days after (aftershock also is same day)
 near_japan_df <- monthDay_df %>%
-  filter(Date > as.Date("2011-03-11") & Date <= as.Date("2011-03-21"),  ## 10 days after
+  filter(Date >= as.Date("2011-03-11") & Date < as.Date("2011-03-19"),  ## 10 days after
          Longitude > 100 & Longitude < 150, ## Somewhat arbitrary but accounts for all "nearby" earthquakes
-         Latitude > 25 & Latitude < 50) 
+         Latitude > 25 & Latitude < 50,
+         Magnitude < 9.1) ## removing the initial shock
 
 ## Map of just japan? 
 japan_map <- world_map_data %>%
@@ -117,17 +118,23 @@ japan_map <- world_map_data %>%
 
 ## Maps and graphs
 ```{r}
-## Just Tōhoku, Japan earthquake point
-japan_point <- monthDay_df %>%
-  filter(num_per_day >=128)
+## Filter for earthquakes since 2000
+monthDay_df <- monthDay_df %>%
+  filter(Year >= 2000)
+
+IO_point <- monthDay_df %>%
+  filter(num_per_day == 51)
 
 ## Number of earthquakes per day over time
 p.num <- 
 ggplot() +
   geom_point(data=monthDay_df, aes(x=Date, y=num_per_day), color="grey40") +
-  geom_point(data=japan_point, aes(x=Date, y=num_per_day), color="red") +
-  annotate("text", x=as.Date("2012-01-01"), y=110, label="2011 Tōhoku, Japan\nearthquake", 
+  geom_point(data=japan_earthquake, aes(x=Date, y=num_per_day), color="red") +
+  geom_point(data=IO_point, aes(x=Date, y=num_per_day), color="purple") +
+  annotate("text", x=as.Date("2011-03-11"), y=110, label="Tōhoku, Japan earthquake\n(March 11, 2011)", 
            color="red", family="serif", size=3) +
+  annotate("text", x=as.Date("2004-12-26"), y=70, label="Indian Ocean earthquake\n(December 26, 2004)",
+           color="purple", family="serif", size=3) +
   theme_minimal() +
   theme(text = element_text(family="serif"),
         axis.title.y = element_blank(),
@@ -144,23 +151,24 @@ p.num
 
 ``` {r}
 ## a map of the earthquake in Japan with the aftershock
+
 p.map <-
 ggplot() +
   geom_polygon(data=japan_map, aes(x=long, y=lat, group=group),
                fill="grey95", color="grey40") +
-  geom_point(data=japan_earthquake, aes(x=Longitude, y=Latitude), size=1) + ## earthquake
-  geom_point(data=near_japan_df, aes(x=Longitude, y=Latitude), color="red", size=1) + ## 10 days 
+  geom_point(data=near_japan_df, aes(x=Longitude, y=Latitude), color="red", size=1, alpha=0.4) + ## aftershock 
+  geom_point(data=japan_earthquake, aes(x=Longitude, y=Latitude), size=1) + ## initial shock
   theme_map() +
   coord_map() +
   labs(title = "Map of earthquake and aftershock",
-       subtitle = "Aftershock is in the same place as initial earthquake") +
-  annotate("segment", x=140, xend=140.6, y=31.5, yend=34.5,
+       subtitle = "Aftershock is surrounding initial earthquake") +
+  annotate("segment", x=140, xend=141, y=31.5, yend=34.5,
            color="red", size=0.8, arrow=arrow(length=unit(0.3, "cm"))) +
-  annotate("segment", x=146, xend=144, y=33, yend=36,
+  annotate("segment", x=146.5, xend=143, y=40, yend=38.5,
            color="black", size=0.8, arrow=arrow(length=unit(0.3, "cm"))) +
-  annotate("text", x=140, y=30.5, label="Aftershock (10 days)", 
+  annotate("text", x=140, y=30.5, label="Aftershock (7 days)", 
            color="red", family="serif", size=3.5) +
-  annotate("text", x=147, y=32, label="Initial earthquake", 
+  annotate("text", x=147, y=41.5, label="Initial\nearthquake", 
            color="black", family="serif", size=3.5) +
   theme(text = element_text(family="serif")) +
   scale_x_continuous(limits=c(120, 155))
@@ -169,22 +177,46 @@ p.map
 
 
 ``` {r}
+## Comparing this to 12/26/2004 Indian Ocean earthquake 
+## Note: this earthquake was chosen due to it also having a 9.1
+##  magnitude and occuring around the same time
+
+IO_earthquake <- monthDay_df %>%
+  filter(Date >= as.Date("2004-12-26") & Date <= as.Date("2005-01-02"),
+         hem != "Northwest",
+         Magnitude < 9.1) %>% ## only want the aftershock
+  mutate(earthquake = "Indian Ocean (2004)",
+         days_after = abs(as.Date("2004-12-26") - as.Date(Date)))
+
+near_japan_df <- near_japan_df %>%
+  mutate(earthquake = "Tōhoku Japan (2011)", 
+         days_after = abs(as.Date("2011-03-11") - as.Date(Date)))
+
+aftershock_compared <- bind_rows(IO_earthquake, near_japan_df)
+
+## Tricking r to plot on just one facet
+facet_trick <- data.frame(days_after=3.5, num_per_day=90, lab="Indian Ocean earthquake was chosen for comparison\nbecause similarities to  the Tōhoku, Japan earthquake.\nBoth of them caused a tsunami, reached a magnitude of 9.1,\nand were highly devistating.", earthquake=factor("Indian Ocean (2004)"))
+
 ## num per day aftershock
 p.aftershock <- 
-ggplot() +
-  geom_col(data=near_japan_df, aes(x=Day, y=num_per_day), position = "identity", fill="grey40") +
-  labs(title = "Number of earthquakes for 10 days following",
-       subtitle = "Decrease in number of earthquakes per day") +
+ggplot(aftershock_compared) +
+  geom_col(aes(x=days_after, y=num_per_day), position = "identity", fill="grey40") +
+  facet_grid(~earthquake) +
+  labs(title = "Number of aftershock earthquakes per day: Indian Ocean vs Tōhoku, Japan",
+       subtitle = "Both decrease in number of earthquakes per day") +
   theme_minimal() +
   theme(text = element_text(family="serif"), 
         axis.title.x = element_blank(),
         axis.title.y = element_blank(),
         axis.ticks.x = element_blank(),
         title = element_text(size=9.3)) +
-  scale_x_continuous(labels = NULL, 
-                     minor_breaks = NULL,
-                     breaks = NULL) +
-  scale_y_continuous(minor_breaks = NULL) 
+   scale_x_continuous(labels = NULL, 
+                      minor_breaks = NULL,
+                      breaks = NULL) +
+  scale_y_continuous(minor_breaks = NULL) +
+  geom_text(data=facet_trick, x=3.5, y=85,
+            label="Indian Ocean earthquake was chosen for comparison\nbecause similarities to  the Tōhoku, Japan earthquake.\nBoth of them caused a tsunami, reached a magnitude of 9.1,\nand were highly devistating.",
+            size=2.5, family="serif")
 p.aftershock
 
 ```
@@ -193,10 +225,6 @@ p.aftershock
 
 ```{r}
 ## building dashboard
-p.num
-p.map
-p.aftershock
-
 
 dash.earthquake <- 
   (p.map) + (p.num / p.aftershock) +
@@ -204,6 +232,14 @@ dash.earthquake <-
                   caption = "Source: National Earthquake Information Center (NEIC)",
                   theme = theme(plot.caption = element_text(family="mono"),
                                 plot.title = element_text(family="serif"))) 
+dash.earthquake2 <- 
+  p.num | p.map | p.aftershock +
+  plot_annotation(title = "2011 Tōhoku, Japan earthquake and aftershock",
+                  caption = "Source: National Earthquake Information Center (NEIC)",
+                  theme = theme(plot.caption = element_text(family="mono"),
+                                plot.title = element_text(family="serif"))) 
+
+## Save plot
 dash.earthquake
 ggsave(filename="earthquakeDash.png", plot=dash.earthquake,
        dpi=600, width=12, height=7)
