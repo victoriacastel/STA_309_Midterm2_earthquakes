@@ -195,7 +195,7 @@ near_japan_df <- near_japan_df %>%
 aftershock_compared <- bind_rows(IO_earthquake, near_japan_df)
 
 ## Tricking r to plot on just one facet
-facet_trick <- data.frame(days_after=3.5, num_per_day=90, lab="Indian Ocean earthquake was chosen for comparison\nbecause similarities to  the Tōhoku, Japan earthquake.\nBoth of them caused a tsunami, reached a magnitude of 9.1,\nand were highly devistating.", earthquake=factor("Indian Ocean (2004)"))
+facet_trick <- data.frame(days_after=3.5, num_per_day=90, lab="Indian Ocean earthquake was chosen for comparison\nbecause of similarities to  the Tōhoku, Japan earthquake.\nBoth of them caused a tsunami, reached a magnitude of 9.1,\nand were highly devistating.", earthquake=factor("Indian Ocean (2004)"))
 
 ## num per day aftershock
 p.aftershock <- 
